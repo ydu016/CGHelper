@@ -107,6 +107,69 @@ BOOL EjectDll(DWORD dwPID, LPCTSTR szDllName)
 	return TRUE;
 }
 
+typedef struct _THREAD_PARAM
+{
+	FARPROC pFunc[2];
+	char szBuf[2][128];
+	int crood[2];
+}THREAD_PARAM, *PTHREAD_PARAM;
+
+typedef HMODULE(WINAPI *PFLOADLIBRARYA)(LPCSTR lpLibFileName);
+typedef FARPROC(WINAPI *PFGETPROCEADDRESS)(HMODULE hModule, LPCSTR lpProcName);
+typedef BOOL(*AUTONAV)(int x, int y);
+
+DWORD WINAPI ThreadProc(LPVOID lParam)
+{
+	PTHREAD_PARAM	pParam = (PTHREAD_PARAM)lParam;
+	HMODULE			hMod = NULL;
+	FARPROC			pFunc = NULL;
+
+	hMod = ((PFLOADLIBRARYA)pParam->pFunc[0])(pParam->szBuf[0]);
+	pFunc = (FARPROC)((PFGETPROCEADDRESS)pParam->pFunc[1])(hMod, pParam->szBuf[1]);
+	((AUTONAV)pFunc)(pParam->crood[0], pParam->crood[1]);
+
+	return 0;
+}
+
+BOOL InjectCode(DWORD dwPID, int x, int y)
+{
+	HMODULE			hMod			= NULL;
+	THREAD_PARAM	param			= { 0, };
+	HANDLE			hProcess		= NULL;
+	HANDLE			hThread			= NULL;
+	LPVOID			pRemoteBuf[2]	= { 0, };
+	DWORD			dwSize			= 0;
+
+	hMod = GetModuleHandleA("kernel32.dll");
+
+	param.pFunc[0] = GetProcAddress(hMod, "LoadLibraryA");
+	param.pFunc[1] = GetProcAddress(hMod, "GetProcAddress");
+	strcpy_s(param.szBuf[0], "CGHelper.dll");
+	strcpy_s(param.szBuf[1], "AutoNavigate");
+
+	param.crood[0] = x;
+	param.crood[1] = y;
+
+	hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwPID);
+
+	dwSize = sizeof(THREAD_PARAM);
+	pRemoteBuf[0] = VirtualAllocEx(hProcess, NULL, dwSize, MEM_COMMIT, PAGE_READWRITE);
+	WriteProcessMemory(hProcess, pRemoteBuf[0], (LPVOID)&param, dwSize, NULL);
+
+	dwSize = (DWORD)InjectCode - (DWORD)ThreadProc;
+	pRemoteBuf[1] = VirtualAllocEx(hProcess, NULL, dwSize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+
+	WriteProcessMemory(hProcess, pRemoteBuf[1], (LPVOID)ThreadProc, dwSize, NULL);
+	hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pRemoteBuf[1],
+		pRemoteBuf[0], 0, NULL);
+
+	WaitForSingleObject(hThread, INFINITE);
+	CloseHandle(hThread);
+	CloseHandle(hProcess);
+
+	return TRUE;
+}
+
 int main()
 {
 	DWORD dwPID = FindProcessID(L"cg_item_6000.exe");
@@ -116,13 +179,14 @@ int main()
 		switch (ch)
 		{
 		case 'i':
-			if (InjectDll(dwPID, L"C:\\Users\\CEG2136\\Documents\\Visual Studio 2017\\Projects\\InjectDll\\Release\\CG1.dll"))
+			if (InjectDll(dwPID, L"C:\\Users\\CEG2136\\Documents\\Visual Studio 2017\\Projects\\CGHelper\\Release\\CGHelper.dll"))
 				printf("注入成功\n");
 			break;
 		case 'r':
+			InjectCode(dwPID, 23, 23);
 			break;
 		case 'e':
-			if (EjectDll(dwPID, L"CG1.dll"))
+			if (EjectDll(dwPID, L"CGHelper.dll"))
 				printf("卸载成功\n");
 			break;
 		default:

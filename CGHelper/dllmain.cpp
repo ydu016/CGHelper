@@ -111,7 +111,7 @@ BOOL getDir(Node& next) {
 	return true;
 }
 
-BOOL AutoNavigate(Node dest)
+BOOL _AutoNavigate(Node dest)
 {
 	char path[] = "C:\\Users\\CEG2136\\Downloads\\CrossGate\\map\\0\\1531.dat";
 
@@ -182,11 +182,11 @@ BOOL AutoNavigate(Node dest)
 	return true;
 }
 
-__declspec(dllexport) void AutoNavigate(int x, int y) {
+extern "C" __declspec(dllexport)  void AutoNavigate(int x, int y) {
 	Node dest;
 	dest.x = x;
 	dest.y = y;
-	while (!AutoNavigate(dest))
+	while (!_AutoNavigate(dest))
 		;
 	MessageBoxA(NULL, "Arrived", NULL, 0);
 }
